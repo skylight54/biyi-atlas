@@ -1,0 +1,312 @@
+--- a/src/main/java/com/biyi/atlas/client/AtlasScreen.java
++++ b/src/main/java/com/biyi/atlas/client/AtlasScreen.java
+@@ -180,7 +180,8 @@
+         case INSPECTOR->authorMode?"属性":"详情";case VIEW->"视图";case PERSONAL->"设置";case SETTINGS->"工程";case AI->"MCP";default->"操作";
+     };}
+     public static void showForAi(boolean author,String panel){
+-        if (author && !AtlasAuthoring.confirmed()) return;
++        if (author && (!AtlasAuthoring.confirmed() || Minecraft.getInstance().player == null
++                || !Minecraft.getInstance().player.isCreative())) return;
+         var screen=createScreen(author);
+         Minecraft.getInstance().setScreen(screen);
+         screen.drawerSection=switch(panel){case "details"->UiSection.INSPECTOR;case "mcp"->UiSection.AI;case "regions"->UiSection.REGIONS;default->UiSection.VIEW;};
+@@ -351,7 +352,7 @@
+         if (minecraft.level == null || minecraft.player == null) {
+             return;
+         }
+-        if (author && (!AtlasAuthoring.confirmed() || (!minecraft.player.isCreative() && !minecraft.player.hasPermissions(2)))) {
++        if (author && (!AtlasAuthoring.confirmed() || !minecraft.player.isCreative())) {
+             minecraft.player.displayClientMessage(
+                     Component.literal("[避役图志] 作者地图需要服务端确认编辑权限"), false);
+             return;
+@@ -1909,8 +1910,13 @@
+         g.drawString(font,trimToWidth(title,Math.max(40,this.width-160)),16,16,0xFF343F3E,false);
+         String scale=(authorMode?AtlasAiBridge.connectionBadge()+" · ":"")+String.format("×%.2f",pixelsPerBlock);
+         g.drawString(font,scale,this.width-font.width(scale)-18,16,0xFF65716C,false);
+-        String footer=authorMode?"在画布编辑 · 右键加点 · 回车完成":"拖动地图 · 滚轮缩放 · M 关闭";
+-        if(authorMode&&!AtlasMapSession.preparation().startsWith("尚未"))footer=AtlasMapSession.preparation();
++        String footer=authorMode ? switch(tool) {
++            case REGION, ROAD -> brushIsDrag() ? tool.label + " · 右键拖动成形" :
++                    tool.label + " · 右键加点 · 回车完成 · Esc 取消";
++            case SELECT -> vertexEditRegion == null ? "点选对象 · E 编辑属性 · Ctrl+Z 撤销" : "拖动顶点 · 点边插点 · Shift 点顶点删除";
++            default -> tool.label + " · 右键操作";
++        }:"拖动地图 · 滚轮缩放 · M 关闭";
++        
+         if(!authorMode)footer=AtlasMapSession.status();
+         g.drawString(font,trimToWidth(footer,this.width-32),16,this.height-14,0xFF65716C,false);
+     }
+@@ -2084,6 +2090,7 @@
+                     rebuildButtons();
+                 }
+                 case WAYPOINT -> addWaypoint(worldX, worldZ);
++                case AUTHOR_WAYPOINT -> addPlace(worldX, worldZ, "author_waypoint");
+                 case UNLOCK -> toggleRegionAt(worldX, worldZ);
+                 case SELECT -> pickAt(mouseX, mouseY);
+             }
+@@ -2275,6 +2282,22 @@
+ 
+     @Override
+     public void init() {
++        if (this instanceof EditorAtlasScreen editor && editor.canResume()) {
++            var draft = suspended.take(minecraft.level, minecraft.getConnection());
++            if (draft != null && pendingRoad.isEmpty() && pendingRegion.isEmpty()) {
++                dimension = new ResourceLocation(draft.dimension());
++                rebuildDimensionOrder();
++                viewLayer = editLayer = draft.layer();
++                centerX = draft.x();
++                centerZ = draft.z();
++                pixelsPerBlock = draft.scale();
++                tool = Tool.valueOf(draft.tool());
++                regionBrush = Brush.valueOf(draft.regionBrush());
++                roadBrush = Brush.valueOf(draft.roadBrush());
++                pendingRoad.addAll(draft.road());
++                pendingRegion.addAll(draft.region());
++            }
++        }
+         refreshViewArea();
+         rebuildButtons();
+     }
+@@ -2712,9 +2735,24 @@
+ 
+         // ---------- 右上角：显示控制 ----------
+         int dispX = this.width - MARGIN - DISPLAY_PANEL_W;
++        if (this instanceof EditorAtlasScreen editor) {
++            editor.rememberView(dimension, viewLayer);
++            buttons.add(new AtlasButton(0, 0, 120, 18, "区域与对象", null, () ->
++                    minecraft.setScreen(new EditorObjectTree(editor, dimension, viewLayer, target -> {
++                        clearSelection();
++                        if (target instanceof AtlasRegion r) { selectedRegion = r; setLastSelectedRegion(r); }
++                        else if (target instanceof AtlasPlace p) selectedPlace = p;
++                        else if (target instanceof AtlasRoad r) selectedRoad = r;
++                        else if (target instanceof AtlasWaypoint w) selectedWaypoint = w;
++                        drawerSection = UiSection.INSPECTOR;
++                        drawerOpen = true;
++                        drawerScroll = 0;
++                        rebuildButtons();
++                    }))));
++        }
+         if(authorMode){
+             int barY=MARGIN+58;
+-            buttons.add(new AtlasButton(MARGIN+8,barY,64,16,"绘制区域",null,()->{tool=Tool.REGION;message("右键加顶点，回车闭合区域");}));
++            buttons.add(toolButton(MARGIN + 8, barY, 76, "画区域", Tool.REGION));
+             buttons.add(new AtlasButton(MARGIN+76,barY,64,16,"设地图范围",null,()->{
+                 if(selectedRegion==null){message("先选择要作为地图范围的区域");return;}
+                 if(!selectedRegion.mapArea())toggleRegionMapArea(selectedRegion.id());
+@@ -2729,7 +2767,8 @@
+             buttons.add(new AtlasButton(MARGIN+108,barY+20,64,16,"取消准备",null,()->com.biyi.atlas.net.AreaTerrainMessage.cancelPrepare()));
+             buttons.add(new AtlasButton(MARGIN+212,barY,64,16,"玩家预览",null,()->{
+                 if(selectedRegion!=null&&selectedRegion.mapArea()&&AtlasUnlocks.isVisible(selectedRegion.id()))AtlasMapSession.select(selectedRegion);
+-                open();
++                if (this instanceof EditorAtlasScreen editor) editor.openPreview(this, dimension, viewLayer);
++                else open();
+             }));
+         }
+         if(authorMode){
+@@ -2834,7 +2873,7 @@
+             int rowY = areaY + 18;
+             int shown = 0;
+             for (AreaRow row : rows) {
+-                if (shown++ >= MAX_AREA_ROWS) {
++                if (!authorMode && shown++ >= MAX_AREA_ROWS) {
+                     break;
+                 }
+                 final AtlasRegion target = row.region();
+@@ -2847,7 +2886,7 @@
+                         DISPLAY_PANEL_W - 6 - row.depth() * 10, 14, label, null, () -> {
+                     if(authorMode){
+                         selectedRegion=target;clearSelectionExcept(target);setLastSelectedRegion(target);
+-                        lastUiSelection=selectionKey();
++                        drawerSection = UiSection.INSPECTOR; drawerScroll = 0;
+                     }
+                     if (row.depth() == 0 && row.hasChildren()) {
+                         if (expandedAreas.contains(target.id())) {
+@@ -2932,7 +2971,12 @@
+         if (pages.length == 0) {
+             // 玩家没有底部作者面板，只有"选中元素信息窗"
+             addSelectionButtons();
+-            arrangeUi();
++            if (this instanceof EditorAtlasScreen editor) {
++            buildingSection = UiSection.SETTINGS;
++            buttons.add(new AtlasButton(0, 0, 110, 18, "作者权限与服务", null,
++                    () -> minecraft.setScreen(new EditorServiceScreen(editor))));
++        }
++        arrangeUi();
+             return;
+         }
+         switch (page) {
+@@ -2958,7 +3002,7 @@
+                 }
+                 buttons.add(toolButton(panelX + 182, contentY, 76, "选择", Tool.SELECT));
+                 buttons.add(toolButton(panelX + 262, contentY, 70, "画道路", Tool.ROAD));
+-                buttons.add(toolButton(panelX + 182, contentY + 20, 76, "画区域", Tool.REGION));
++                buttons.add(toolButton(panelX + 182, contentY + 20, 76, "作者路标", Tool.AUTHOR_WAYPOINT));
+                 buttons.add(toolButton(panelX + 262, contentY + 20, 70, "放传送点", Tool.TELEPORT));
+                 // 导入与参考（不再有"生成俯视图"，解锁相关也不属于"放置"范畴）
+                 buttons.add(new AtlasButton(panelX + 8, contentY + 48, 118, 16, "选标记图…", null, () -> {
+@@ -3198,6 +3242,11 @@
+                 }catch(Exception e){message(e.getMessage());}
+             }));
+         }
++        if (this instanceof EditorAtlasScreen editor) {
++            buildingSection = UiSection.SETTINGS;
++            buttons.add(new AtlasButton(0, 0, 110, 18, "作者权限与服务", null,
++                    () -> minecraft.setScreen(new EditorServiceScreen(editor))));
++        }
+         arrangeUi();
+     }
+ 
+@@ -3377,12 +3426,8 @@
+                                     () -> toggleRegionDefault(target.id()))),
+                     values -> {
+                         AtlasRegion current = currentRegion(target.id());
+-                        applyRegion(withRegion(current, values.get("名称"), current.labelText(),
++                        applyRegion(withRegion(current, values.get("名称"), values.get("标注文字"),
+                                 values.get("许可证 id"), current.image()));
+-                        // 标注文字单独处理（第三个输入框是许可证 id）
+-                        AtlasRegion applied = currentRegion(target.id());
+-                        applyRegion(withRegion(applied, applied.name(), values.get("标注文字"),
+-                                applied.unlockId(), applied.image()));
+                     }));
+             return;
+         }
+@@ -3525,7 +3570,8 @@
+             if (candidate.id().equals(id) || candidate.isChild()) {
+                 continue;
+             }
+-            if (AtlasContent.get().wouldCreateCycle(id, candidate.id())) {
++            if (AtlasContent.get().wouldCreateCycle(id, candidate.id())
++                    || !EditorBoundary.encloses(candidate.outline(), region.outline())) {
+                 continue;
+             }
+             options.add(candidate.id());
+@@ -3533,18 +3579,25 @@
+         String current = region.parent() == null ? "" : region.parent();
+         int index = options.indexOf(current);
+         String next = options.get((index + 1) % options.size());
+-        if (!next.isEmpty()) {
+-            // 设为子区域后必须真的落在父区域内（否则给出提示但不阻止，作者可能先画后调）
+-            AtlasRegion parent = AtlasContent.get().regionById(next);
+-            if (parent != null && !parent.contains(region.labelX(), region.labelZ())) {
+-                message("提示：该区域中心不在「" + parent.name() + "」内，稍后调整边界");
+-            }
+-            if (parent != null && !parent.mapArea()) {
+-                message("提示：父区域「" + parent.name() + "」当前不是地图范围单位，可顺手打开");
+-            }
+-        }
+-        applyRegion(region.withOwner(next, region.mapArea(),
+-                next.isEmpty() ? false : region.childLocksContent()));
++        if (current.equals(next)) { message("没有其他可包含本区的父区域"); return; }
++        var content = AtlasContent.get();
++        List<String> affected = new ArrayList<>();
++        for (var child : content.childrenOf(id)) affected.add(child.name());
++        for (var place : content.placesAt(dimension)) if (id.equals(place.region())) affected.add(place.name());
++        for (var road : content.roadsAt(dimension)) if (id.equals(road.region())) affected.add(road.name());
++        var form = minecraft.screen;
++        String destination = next.isEmpty() ? "顶层" : content.regionById(next).name();
++        minecraft.setScreen(new net.minecraft.client.gui.screens.ConfirmScreen(yes -> {
++            if (yes && this instanceof EditorAtlasScreen editor && editor.canResume()
++                    && content.regionById(id) == region
++                    && (next.isEmpty() || (content.regionById(next) != null
++                    && !content.wouldCreateCycle(id, next)
++                    && EditorBoundary.encloses(content.regionById(next).outline(), region.outline())))) {
++                applyRegion(region.withOwner(next, region.mapArea(), !next.isEmpty() && region.childLocksContent()));
++            }
++            minecraft.setScreen(form);
++        }, Component.literal("将「" + region.name() + "」移到「" + destination + "」？"),
++                Component.literal("受影响的对象 · " + (affected.isEmpty() ? "无" : String.join("、", affected)))));
+     }
+ 
+     private void toggleRegionMapArea(String id) {
+@@ -3892,16 +3945,18 @@
+     private void addPlace(double worldX, double worldZ, String type) {
+         boolean teleport = AtlasPlace.TYPE_TELEPORT.equals(type);
+         String region = currentRegionId(worldX, worldZ);
+-        String name = uniquePlaceName(teleport ? "传送点 " : "地点 ", editLayer);
++        boolean waypoint = "author_waypoint".equals(type);
++        String name = uniquePlaceName(teleport ? "传送点 " : waypoint ? "作者路标 " : "地点 ", editLayer);
+         // 用调色板里选中的那个图标（历史 bug：这里硬编码了 "flag"，所以放出来全是旗帜）
+         String icon = brushIcon == null || brushIcon.isEmpty() ? "pin" : brushIcon;
+         AtlasPlace place = teleport
+                 ? AtlasPlace.teleport(name, dimension, editLayer, region, worldX, worldZ, "作者放置的传送点")
++                : waypoint ? new AtlasPlace(name, type, dimension, editLayer, region, worldX, worldZ, "flag", iconColor("flag"), "", true, true)
+                 : AtlasPlace.poi(name, dimension, editLayer, region, worldX, worldZ, icon,
+                         iconColor(icon), "");
+         AtlasContent.get().addPlace(place);
+         AtlasContent.get().saveAuthored();
+-        message("已添加" + (teleport ? "传送点：" : "地点：" ) + name + "（图标 " + icon + "）"
++        message("已添加 " + name + "（图标 " + place.icon() + "）"
+                 + (region.isEmpty() ? "" : " · 区域 " + region));
+     }
+ 
+@@ -3997,7 +4052,6 @@
+     private void finishRegion() {
+         if (pendingRegion.size() < 3) {
+             message("区域至少需要三个顶点");
+-            pendingRegion.clear();
+             return;
+         }
+         // id 用"命名空间"：子区域 = 父id/子名；顶层用碰撞探测的 region_N（P0-1，绝不复用已存在 id）
+@@ -4015,7 +4069,7 @@
+         AtlasRegion parent = null;
+         int parentDepth = -1;
+         for (AtlasRegion candidate : content.regionsAt(dimension, editLayer)) {
+-            if (!mostlyInside(candidate, pendingRegion)) {
++            if (!EditorBoundary.encloses(candidate.outline(), pendingRegion)) {
+                 continue;
+             }
+             int depth = regionDepth(candidate);
+@@ -4046,7 +4100,7 @@
+                 AtlasRegion.UNLOCK_LICENSE, id, false, "", new ArrayList<>(),
+                 parent == null ? "" : parent.id(), parent == null, true);   // 分层锁：子区域默认锁定即隐藏内容
+         AtlasRegion conflict = content.overlapsSibling(region);
+-        if (conflict != null && parent == null && mostlyInside(conflict, pendingRegion)) {
++        if (conflict != null && parent == null && EditorBoundary.encloses(conflict.outline(), pendingRegion)) {
+             // 兜底：确实画在某个区域里面（例如凹形/中心点落在外面）→ 认它当父，而不是拒绝
+             parent = conflict;
+             int n2 = content.childrenOf(parent.id()).size() + 1;
+@@ -4104,6 +4158,7 @@
+     }
+ 
+     private void finishRoad() {
++        if (pendingRoad.size() < 2) { message("道路至少需要两个顶点"); return; }
+         if (pendingRoad.size() >= 2) {
+             String name = "道路 " + (AtlasContent.get().roadsAt(dimension, editLayer).size() + 1);
+             String id = AtlasContent.get().nextRoadId(dimension, editLayer);   // 统一 id 生成（永不复用）
+@@ -4361,7 +4416,7 @@
+                     || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER) {
+                 if (tool == Tool.REGION) {
+                     finishRegion();
+-                } else {
++                } else if (tool == Tool.ROAD) {
+                     finishRoad();
+                 }
+                 return true;
+@@ -4390,6 +4445,18 @@
+     @Override
+     public boolean isPauseScreen() {
+         return false;
++    }
++
++    private static final EditorDraft suspended = new EditorDraft();
++
++    @Override
++    public void removed() {
++        if (this instanceof EditorAtlasScreen && (!pendingRoad.isEmpty() || !pendingRegion.isEmpty())) {
++            suspended.save(minecraft.level, minecraft.getConnection(), new EditorDraft.Geometry(
++                    dimension.toString(), editLayer, tool.name(), regionBrush.name(), roadBrush.name(),
++                    centerX, centerZ, pixelsPerBlock, pendingRoad, pendingRegion));
++        }
++        super.removed();
+     }
+ 
+     @Override
+@@ -4410,7 +4477,8 @@
+         REGION("区域"),
+         RECT("框选"),
+         NODE("加点"),
+-        UNLOCK("解锁开关");
++        UNLOCK("解锁开关"),
++        AUTHOR_WAYPOINT("作者路标");
+ 
+         final String label;
+ 

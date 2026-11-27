@@ -76,15 +76,28 @@ public class AtlasEditScreen extends Screen {
             Button cycleButton=Button.builder(
                             Component.literal(cycle.label() + "：" + cycle.value().get()),
                             button -> {
+                                if (!mayEdit()) return;
                                 cycle.action().run();
                                 rebuildWidgets();
                             })
                     .bounds(left, y, formWidth, 20).build();
             cycleButton.visible=y>=contentTop&&y+20<=this.height-58;
-            cycleButton.active=cycleButton.visible;
+            cycleButton.active=cycleButton.visible && mayEdit();
             addRenderableWidget(cycleButton);
         }
         int buttonsY = this.height-34;
+        if (parent instanceof EditorAtlasScreen editor) {
+            int third = (formWidth - 8) / 3;
+            addRenderableWidget(Button.builder(Component.literal("保存文本"), b -> save())
+                    .bounds(left, buttonsY, third, 20).build()).active = mayEdit();
+            addRenderableWidget(Button.builder(Component.literal("玩家预览"), b -> editor.openPreview(this))
+                    .bounds(left + third + 4, buttonsY, third, 20).build()).active = mayEdit();
+            addRenderableWidget(Button.builder(Component.literal("返回"), b -> onClose())
+                    .bounds(left + 2 * third + 8, buttonsY, third, 20).build());
+            updatePanelBottom(buttonsY);
+            editable = mayEdit();
+            return;
+        }
         updatePanelBottom(buttonsY);
         addRenderableWidget(Button.builder(Component.literal("保存文本"), button -> save())
                 .bounds(left, buttonsY, (formWidth-8)/2, 20).build());
@@ -94,7 +107,19 @@ public class AtlasEditScreen extends Screen {
 
     public void refreshLabels(){rebuildWidgets();}
 
+    private boolean editable = true;
+
+    private boolean mayEdit() {
+        return !(parent instanceof EditorAtlasScreen editor) || editor.canResume();
+    }
+
+    @Override
+    public void tick() {
+        if (editable != mayEdit()) rebuildWidgets();
+    }
+
     private void save() {
+        if (!mayEdit()) return;
         Map<String, String> values = new LinkedHashMap<>();
         for (int i = 0; i < inputs.size() && i < boxes.size(); i++) {
             values.put(inputs.get(i).label(), boxes.get(i).getValue());
@@ -138,7 +163,8 @@ public class AtlasEditScreen extends Screen {
             int sy=contentTop+(track-thumb)*scrollOffset/Math.max(1,maxScroll);
             AtlasUiTheme.rect(graphics,right-5,sy,2,thumb,0xFF8C9A94);
         }
-        if(!cycles.isEmpty())graphics.drawString(font,"切换项即时生效",formLeft,this.height-46,0xFF65716C,false);
+        if (!mayEdit()) graphics.drawString(font,"编辑权限已暂停，文本草稿已保留",formLeft,this.height-46,0xff774b35,false);
+        else if(!cycles.isEmpty())graphics.drawString(font,"切换项即时生效",formLeft,this.height-46,0xFF65716C,false);
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 
@@ -154,7 +180,8 @@ public class AtlasEditScreen extends Screen {
     @Override
     public void onClose() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(parent);
+            if (mayEdit()) this.minecraft.setScreen(parent);
+            else AtlasScreen.open();
         }
     }
 
