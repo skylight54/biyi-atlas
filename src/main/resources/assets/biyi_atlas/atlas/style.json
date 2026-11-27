@@ -1,0 +1,21 @@
+{
+  "title": "避役图志 · 山川舆图",
+  "showTerrain": true,
+  "zoomDefault": 2.0,
+  "zoomMin": 0.15,
+  "zoomMax": 24.0,
+  "colors": {
+    "1": "6E7F55",
+    "2": "D9C79A",
+    "7": "5F7A4C",
+    "8": "E8E4D5",
+    "9": "B29B8C",
+    "10": "8C6F52",
+    "11": "8B8B84",
+    "12": "6E8CA0",
+    "13": "7A5F42",
+    "14": "DCD6C6"
+  },
+  "prerevealed": [],
+  "markers": []
+}

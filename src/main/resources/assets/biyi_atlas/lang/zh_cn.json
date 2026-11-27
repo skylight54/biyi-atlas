@@ -1,0 +1,10 @@
+{
+  "key.biyi_atlas.open": "打开 / 关闭地图",
+  "key.categories.biyi_atlas": "避役图志",
+  "itemGroup.biyi_atlas": "避役图志",
+  "item.biyi_atlas.atlas": "避役地图",
+  "item.biyi_atlas.map_wand": "地图魔杖",
+  "item.biyi_atlas.region_license": "区域许可证",
+  "item.biyi_atlas.waypoint_wand": "路标魔杖",
+  "item.biyi_atlas.bestiary_wand": "区域图鉴魔杖"
+}

@@ -1,0 +1,10 @@
+{
+  "key.biyi_atlas.open": "Open / Close Atlas",
+  "key.categories.biyi_atlas": "Biyi Atlas",
+  "itemGroup.biyi_atlas": "Biyi Atlas",
+  "item.biyi_atlas.atlas": "Biyi Atlas",
+  "item.biyi_atlas.map_wand": "Map Wand",
+  "item.biyi_atlas.region_license": "Region License",
+  "item.biyi_atlas.waypoint_wand": "Waypoint Wand",
+  "item.biyi_atlas.bestiary_wand": "Bestiary Wand"
+}

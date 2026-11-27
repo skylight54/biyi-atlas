@@ -1,0 +1,29 @@
+# Local builds and development instances
+.gradle/
+/build/
+/dist/
+/run/
+/runs/
+/logs/
+/recovery/
+/preview/
+*.log
+/build-log*.txt
+*.biyi.zip
+*.jar.backup*
+__pycache__/
+*.py[cod]
+.idea/
+*.iml
+.vscode/
+.env
+.env.*
+
+# World captures, source artwork and local development ledgers
+/docs/art/
+/docs/地图界面设计/*.svg
+/docs/地图界面设计/*.jpg
+/docs/地图界面设计/预览.html
+/task_plan.md
+/findings.md
+/progress.md

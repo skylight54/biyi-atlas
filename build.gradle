@@ -1,0 +1,184 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+        }
+
+        data {
+            workingDirectory project.file('run-data')
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+repositories {
+    // ForgeGradle adds the Forge maven itself; Maven Central and Mojang's library repo are declared
+    // explicitly because this machine's proxy/TLS setup hides them from ForgeGradle otherwise.
+    mavenCentral()
+    maven {
+        name = 'MojangLibraries'
+        url = 'https://libraries.minecraft.net/'
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+}
+
+// Expand mod metadata placeholders inside mods.toml / pack.mcmeta. UTF-8 keeps the Chinese
+// display name intact (the platform default here is GBK).
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version          : forge_version, forge_version_range: forge_version_range,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors            : mod_authors, mod_description: mod_description,
+    ]
+    inputs.properties replaceProperties
+    filteringCharset = 'UTF-8'
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+
+    // ForgeGradle reobfuscates the jar to the SRG names the production client uses.
+    finalizedBy 'reobfJar'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.register('verifyTerrain', JavaExec) {
+    group = 'verification'
+    description = 'Checks contour geometry and terrain NBT compatibility without a game window.'
+    dependsOn tasks.named('testClasses')
+    // 使用已解析的开发类路径，避免 Forge 运行时 mergetool 引入无关的 srgutils 下载。
+    classpath = sourceSets.test.output + sourceSets.main.output + sourceSets.test.compileClasspath
+    mainClass = 'com.biyi.atlas.map.TerrainChecks'
+}
+
+tasks.register('verifyFogShader', JavaExec) {
+    group = 'verification'
+    description = 'Compiles and renders the fog GLSL in an invisible GPU context (requires -PlwjglNatives=<directory>).'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.output + sourceSets.main.output + sourceSets.test.compileClasspath
+    mainClass = 'com.biyi.atlas.map.FogShaderChecks'
+    args file('src/main/resources/assets/biyi_atlas/shaders/core').absolutePath
+    doFirst {
+        if (!project.hasProperty('lwjglNatives')) throw new GradleException('Pass -PlwjglNatives=<existing LWJGL native library directory>')
+        systemProperty 'org.lwjgl.librarypath', project.property('lwjglNatives')
+    }
+}
+tasks.register('replayPublish',JavaExec){
+    dependsOn tasks.named('testClasses')
+    classpath=sourceSets.test.output+sourceSets.main.output+sourceSets.test.compileClasspath
+    mainClass='com.biyi.atlas.map.PublishReplay'
+    doFirst{args project.property('storedInput'),project.property('oldInput'),project.property('terrainInput')}
+}
+
+tasks.register('previewTerrain', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.output + sourceSets.main.output + sourceSets.test.compileClasspath
+    mainClass = 'com.biyi.atlas.map.TerrainRasterPreview'
+    doFirst {
+        args project.property('terrainInput'), project.property('terrainOutput')
+        if(project.hasProperty('previewContent')) args project.property('previewContent')
+    }
+}
+
+tasks.named('test', Test).configure {
+    classpath = sourceSets.test.output + sourceSets.main.output + sourceSets.test.compileClasspath
+}
+
+// ---------------------------------------------------------------------------
+// Testing against the real work client.
+//
+// PCL isolates mods per version, so the jar goes into the version folder rather
+// than the .minecraft root. Override with -PworkClientMods=... when it moves.
+// ---------------------------------------------------------------------------
+def workClientMods = project.findProperty('workClientMods')
+        ?: 'F:/\u907f\u5f79\u8fd9\u4e00\u5757/\u907f\u5f79\u79d1\u5de5\u4f5c\u7aef/.minecraft/versions/1.20.1-Forge_47.4.8/mods'
+
+tasks.register('copyToWorkClient', Copy) {
+    group = 'biyiatlas'
+    description = 'Builds the mod and drops the jar into the work client mods folder.'
+    dependsOn tasks.named('build')
+    from(layout.buildDirectory.dir('libs')) {
+        include "${mod_id}-*.jar"
+        exclude '*-sources.jar'
+        exclude '*-javadoc.jar'
+    }
+    into workClientMods
+    doFirst {
+        def dir = file(workClientMods)
+        if (!dir.isDirectory()) {
+            throw new GradleException("Work client mods folder not found: ${dir}. Pass -PworkClientMods=<path>.")
+        }
+    }
+}
+
+tasks.register('exportAtlasProject', JavaExec) {
+    dependsOn tasks.named('classes')
+    classpath = sourceSets.main.output + sourceSets.test.compileClasspath
+    mainClass = 'com.biyi.atlas.map.ProjectBundle'
+    doFirst { args project.property('projectWorld'), project.property('projectGame'), project.property('projectOutput') }
+}
+
+tasks.register('verifyProjectBundle', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.output + sourceSets.main.output + sourceSets.test.compileClasspath
+    mainClass = 'com.biyi.atlas.map.ProjectRoundTripCheck'
+    doFirst { args project.property('verifyBundle') }
+}
