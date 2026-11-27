@@ -17,3 +17,13 @@
 普通玩家能跑完陌生区→发现→解锁→回看；区域边缘、窄屏、高 GUI 比例的卡片都能操作。重进保留私有路标，第二个账号看不到。连续切区与晚到回包不串图，窗口打开时没有作者入口。
 
 **界面稿**　[02-region](../地图界面设计/公开预览/02-region.svg) · [03-world](../地图界面设计/公开预览/03-world.svg) · [04-pin](../地图界面设计/公开预览/04-pin.svg) · [13-place](../地图界面设计/公开预览/13-place.svg) · [15-unlock](../地图界面设计/公开预览/15-unlock.svg)
+
+## 02 分支交接
+
+起始提交 `eb422d8`。09 沿用 `AtlasScreen.openForMapKey()` 分流，玩家视图由 `PlayerAtlasScreen` 处理点按、拖动、光标缩放和 M 关闭。Esc 先收起小卡，再关闭地图。服务端成功解锁继续走 `AtlasUnlockReveal.announce(id)`，演出期间 Esc 跳过，随后显示区域地图。探索栏统计当前维度已记录区块和当前层已开放区域。
+
+01 的个人设置继续从 `openDisplaySettings()` 返回同一玩家屏幕。06 和 08 由总控在客户端安装 `PlayerAtlasDetails.Registry.install(details)`。适配器提供已发布且玩家可见的入口追踪目标及当前区域楼层列表，旧数据默认显示地表与“入口待标注”。
+
+新增私人路标记录在实例的 `biyi_atlas/data/<世界键>/players/<UUID>/<维度命名空间>/<维度路径>.nbt`。已有公共路标按原维度文件读取。删除历史随私人文件保存。
+
+离线回归命令为 `gradlew.bat --offline build verifyTerrain -I tools/player-check.gradle verifyPlayerPins`。存储用例覆盖重读、世界/账号/维度隔离和重读后恢复。09 实机复验项包括真实服务端解锁、连续切区晚到回包、两账号重登、窄屏和高 GUI 比例的点按操作。
