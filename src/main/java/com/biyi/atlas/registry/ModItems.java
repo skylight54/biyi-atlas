@@ -44,7 +44,6 @@ public final class ModItems {
 
     public static void addToCreativeTabs(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
-            event.accept(ATLAS);
             event.accept(MAP_WAND);
             event.accept(REGION_LICENSE);
             event.accept(WAYPOINT_WAND);

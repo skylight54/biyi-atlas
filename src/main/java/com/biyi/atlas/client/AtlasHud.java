@@ -21,6 +21,67 @@ public final class AtlasHud {
     private static final ResourceLocation ARROW =
             new ResourceLocation(BiyiAtlas.MODID, "textures/atlas/arrow.png");
 
+    private static final ResourceLocation CLOUD =
+            new ResourceLocation(BiyiAtlas.MODID, "textures/atlas/fog_ink.png");
+
+    private static void renderMap(GuiGraphics g, Minecraft mc, float tick, int width, int height, int size) {
+        var corner = AtlasSettings.corner();
+        int left = corner == AtlasSettings.Corner.右上 || corner == AtlasSettings.Corner.右下 ? width - size - 6 : 6;
+        int top = corner == AtlasSettings.Corner.左下 || corner == AtlasSettings.Corner.右下 ? height - size - 6 : 6;
+        var player = mc.player;
+        var position = player.getPosition(tick);
+        float heading = player.getViewYRot(tick) + 180;
+        int extent = 2 * (size + 16);
+        var camera = AtlasSettings.hudCamera(extent, position.x, position.z);
+        var dimension = mc.level.dimension().location();
+        var area = AtlasMapSession.active();
+        g.fill(left-2, top-2, left+size+2, top+size+2, 0xffaa956f);
+        g.fill(left, top, left+size, top+size, 0xff35464a);
+        g.enableScissor(left, top, left+size, top+size);
+        var pose = g.pose();
+        pose.pushPose();
+        try {
+            pose.translate(left + size / 2f, top + size / 2f, 0);
+            if (!AtlasSettings.northUp()) pose.mulPose(Axis.ZP.rotationDegrees(-heading));
+            pose.translate(-extent / 2, -extent / 2, 0);
+            g.blit(CLOUD, 0, 0, extent, extent, 0, 0, 1, 1, 1, 1);
+            if (AtlasAuthoring.known() && AtlasServerView.authoritative() && area != null
+                    && area.layer() == 0 && dimension.equals(area.dimension()) && AtlasServerView.visible(area.id())) {
+                AtlasMapSession.rendering(false, area);
+                AtlasTerrainTiles.render(g, AtlasMapSession.terrain(), extent, extent, position.x, position.z,
+                        camera.pixelsPerBlock(), (x,z) -> known(dimension, x, z));
+                if (AtlasSettings.markers()) {
+                    for (var marker : AtlasStyle.INSTANCE.markers()) {
+                        if (dimension.equals(marker.dimension())) dot(g, camera, dimension, marker.x(), marker.z());
+                    }
+                    for (var point : AtlasStorage.get(dimension).waypoints()) {
+                        if (point.layer() == 0) dot(g, camera, dimension, point.x(), point.z());
+                    }
+                }
+            }
+            pose.translate(extent / 2, extent / 2, 0);
+            pose.mulPose(Axis.ZP.rotationDegrees(heading));
+            g.blit(ARROW, -5, -5, 10, 10, 0, 0, 32, 32, 32, 32);
+        } finally {
+            pose.popPose();
+            g.disableScissor();
+        }
+    }
+
+    private static boolean known(ResourceLocation dim, double x, double z) {
+        return AtlasReadView.elementVisible(com.biyi.atlas.map.MapAudience.PLAYER,
+                AtlasVisibility.Kind.MARKER, null, dim, 0, x, z);
+    }
+
+    private static void dot(GuiGraphics g, com.biyi.atlas.map.MapViewport camera, ResourceLocation dim,
+                            double x, double z) {
+        double px = camera.screenX(x), py = camera.screenY(z);
+        if (px < 0 || px >= camera.width() || py < 0 || py >= camera.height() || !known(dim, x, z)) return;
+        int i = (int) px, j = (int) py;
+        g.fill(i-2, j-2, i+3, j+3, 0xff293d3e);
+        g.fill(i-1, j-1, i+2, j+2, 0xffe8cd87);
+    }
+
     private AtlasHud() {
     }
 
@@ -31,14 +92,18 @@ public final class AtlasHud {
 
     private static void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int width, int height) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player == null || minecraft.level == null || minecraft.screen != null) {
+        if (minecraft.player == null || minecraft.level == null || minecraft.screen != null || minecraft.options.hideGui) {
             return;
         }
         Font font = minecraft.font;
 
+        int mapSize = Math.min(112, Math.min(width / 4, height / 3));
+        boolean mapVisible = AtlasSettings.enabled();
+        if (mapVisible) renderMap(graphics, minecraft, partialTick, width, height, mapSize);
+        int recordingY = mapVisible && AtlasSettings.corner() == AtlasSettings.Corner.右上 ? mapSize + 12 : 8;
         if (AtlasRoadRecorder.isRecording()) {
             String recording = "● 记录道路轨迹 " + AtlasRoadRecorder.pointCount() + " 点（R 结束）";
-            graphics.drawString(font, recording, width - font.width(recording) - 8, 8, 0xFFD06A5A, true);
+            graphics.drawString(font, recording, width - font.width(recording) - 8, recordingY, 0xFFD06A5A, true);
         }
 
         AtlasTracker.Target target = AtlasTracker.target();

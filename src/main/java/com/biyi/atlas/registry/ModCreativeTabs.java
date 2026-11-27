@@ -17,9 +17,8 @@ public final class ModCreativeTabs {
     public static final RegistryObject<CreativeModeTab> ATLAS_TAB = TABS.register("biyi_atlas",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.biyi_atlas"))
-                    .icon(() -> new ItemStack(ModItems.ATLAS.get()))
+                    .icon(() -> new ItemStack(ModItems.REGION_LICENSE.get()))
                     .displayItems((parameters, output) -> {
-                        output.accept(ModItems.ATLAS.get());
                         output.accept(ModItems.MAP_WAND.get());
                         output.accept(ModItems.WAYPOINT_WAND.get());
 

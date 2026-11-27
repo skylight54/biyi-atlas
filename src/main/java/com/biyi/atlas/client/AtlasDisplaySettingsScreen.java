@@ -1,6 +1,5 @@
 package com.biyi.atlas.client;
 
-import com.biyi.atlas.map.HeldMapView;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -17,27 +16,30 @@ public final class AtlasDisplaySettingsScreen extends Screen {
 
     @Override
     protected void init() {
-        int left = width / 2 - 88;
-        int top = height / 2;
-        addRenderableWidget(Button.builder(Component.literal("缩小"), b -> adjust(-1))
-                .bounds(left, top, 84, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("放大"), b -> adjust(1))
-                .bounds(left + 92, top, 84, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("返回地图"), b -> onClose())
-                .bounds(left, top + 26, 176, 20).build());
+        int y = height / 2 - 63;
+        control(y, "小地图 " + on(AtlasSettings.enabled()), AtlasSettings::toggleEnabled);
+        control(y + 22, "位置 " + AtlasSettings.corner(), AtlasSettings::cycleCorner);
+        control(y + 44, AtlasSettings.northUp() ? "北向朝上" : "随玩家转向", AtlasSettings::toggleNorth);
+        control(y + 66, "已知标记 " + on(AtlasSettings.markers()), AtlasSettings::toggleMarkers);
+        button(width / 2 - 88, y + 88, 40, "−", () -> AtlasSettings.adjustZoom(-.25));
+        button(width / 2 + 48, y + 88, 40, "+", () -> AtlasSettings.adjustZoom(.25));
+        control(y + 110, "返回地图", this::onClose);
     }
-
-    private void adjust(int steps) {
-        AtlasSettings.setHeldZoom(HeldMapView.scroll(AtlasSettings.heldZoom(), steps));
-        AtlasHeldRenderer.invalidate();
+    private String on(boolean value) { return value ? "开" : "关"; }
+    private void control(int y, String label, Runnable action) {
+        button(width / 2 - 88, y, 176, label, action);
     }
-
-    @Override
-    public void render(GuiGraphics graphics, int x, int y, float tick) {
+    private void button(int x, int y, int w, String label, Runnable action) {
+        addRenderableWidget(Button.builder(Component.literal(label), b -> {
+            action.run();
+            if (minecraft.screen == this) rebuildWidgets();
+        }).bounds(x, y, w, 20).build());
+    }
+    @Override public void render(GuiGraphics graphics, int x, int y, float tick) {
         renderBackground(graphics);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 44, 0xffeee7d4);
-        String scale = String.format(java.util.Locale.ROOT, "手持图倍率  %.2f×", AtlasSettings.heldZoom() / HeldMapView.DEFAULT);
-        graphics.drawCenteredString(font, scale, width / 2, height / 2 - 20, 0xffe2d6b9);
+        graphics.drawCenteredString(font, title, width / 2, height / 2 - 80, 0xffeee7d4);
+        graphics.drawCenteredString(font, String.format(java.util.Locale.ROOT, "%.2f×", AtlasSettings.zoom()),
+                width / 2, height / 2 + 31, 0xffeee7d4);
         super.render(graphics, x, y, tick);
     }
 

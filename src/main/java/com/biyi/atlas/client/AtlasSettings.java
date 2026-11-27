@@ -36,9 +36,28 @@ public final class AtlasSettings {
     /** 道路节点标记是否显示给玩家（**默认否**：节点是作者的编辑辅助，玩家不需要看）。 */
     private static boolean showNodesToPlayers = false;
 
-    private static double heldZoom=com.biyi.atlas.map.HeldMapView.DEFAULT;
-    public static double heldZoom(){ensureLoaded();return heldZoom;}
-    public static void setHeldZoom(double value){ensureLoaded();heldZoom=com.biyi.atlas.map.HeldMapView.clamp(value);}
+    enum Corner { 右上, 右下, 左下, 左上 }
+    private static Corner corner = Corner.右上;
+    private static double zoom = 1;
+    private static boolean enabled = true, northUp = true, markers = true;
+    static Corner corner() { ensureLoaded(); return corner; }
+    static boolean enabled() { ensureLoaded(); return enabled; }
+    static boolean northUp() { ensureLoaded(); return northUp; }
+    static boolean markers() { ensureLoaded(); return markers; }
+    static double zoom() { ensureLoaded(); return zoom; }
+    static void cycleCorner() { corner = Corner.values()[(corner().ordinal() + 1) % 4]; save(); }
+    static void toggleEnabled() { enabled = !enabled(); save(); }
+    static void toggleNorth() { northUp = !northUp(); save(); }
+    static void toggleMarkers() { markers = !markers(); save(); }
+    static void adjustZoom(double amount) { zoom = clampZoom(zoom() + amount); save(); }
+    static double clampZoom(double value) {
+        return Double.isFinite(value) && value > 0 ? Math.max(.5, Math.min(3, value)) : 1;
+    }
+    static com.biyi.atlas.map.MapViewport hudCamera(int extent, double x, double z) {
+        return new com.biyi.atlas.map.MapViewport(extent, extent, x, z, heldZoom());
+    }
+
+    public static double heldZoom() { return zoom() * com.biyi.atlas.map.HeldMapView.DEFAULT; }
     private static boolean loaded;
 
     private AtlasSettings() {
@@ -119,14 +138,23 @@ public final class AtlasSettings {
     }
 
     public static void load() {
+        load(file());
+    }
+
+    static void load(Path file) {
         loaded = true;
-        Path file = file();
         if (!Files.isRegularFile(file)) {
             return;
         }
         try {
             JsonObject root = GsonHelper.parse(Files.readString(file, StandardCharsets.UTF_8));
-            heldZoom=com.biyi.atlas.map.HeldMapView.clamp(GsonHelper.getAsDouble(root,"heldZoom",com.biyi.atlas.map.HeldMapView.DEFAULT));
+            double legacy = GsonHelper.getAsDouble(root, "heldZoom", com.biyi.atlas.map.HeldMapView.DEFAULT);
+            zoom = clampZoom(GsonHelper.getAsDouble(root, "hudZoom", legacy / com.biyi.atlas.map.HeldMapView.DEFAULT));
+            enabled = GsonHelper.getAsBoolean(root, "hudEnabled", true);
+            northUp = GsonHelper.getAsBoolean(root, "hudNorthUp", true);
+            markers = GsonHelper.getAsBoolean(root, "hudMarkers", true);
+            try { corner = Corner.valueOf(GsonHelper.getAsString(root, "hudCorner", "右上")); }
+            catch (IllegalArgumentException ignored) { corner = Corner.右上; }
             fogEnabled = GsonHelper.getAsBoolean(root, "fogEnabled", fogEnabled);
             lockRoads = GsonHelper.getAsBoolean(root, "lockRoads", lockRoads);
             lockWaypoints = GsonHelper.getAsBoolean(root, "lockWaypoints", lockWaypoints);
@@ -145,11 +173,18 @@ public final class AtlasSettings {
     }
 
     public static void save() {
+        save(file());
+    }
+
+    static void save(Path file) {
         try {
-            Path file = file();
             Files.createDirectories(file.getParent());
             JsonObject root = new JsonObject();
-            root.addProperty("heldZoom",heldZoom);
+            root.addProperty("hudZoom", zoom);
+            root.addProperty("hudEnabled", enabled);
+            root.addProperty("hudNorthUp", northUp);
+            root.addProperty("hudMarkers", markers);
+            root.addProperty("hudCorner", corner.name());
             root.addProperty("fogEnabled", fogEnabled);
             root.addProperty("lockRoads", lockRoads);
             root.addProperty("lockWaypoints", lockWaypoints);
