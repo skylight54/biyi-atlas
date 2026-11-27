@@ -23,7 +23,7 @@ public final class ClientEvents {
         net.minecraft.client.Minecraft client = net.minecraft.client.Minecraft.getInstance();
         while (AtlasKeys.OPEN.consumeClick()) {
             if (client.screen == null && client.player != null && client.level != null) {
-                AtlasScreen.open();
+                AtlasScreen.openForMapKey();
             }
         }
         TerrainSurveyor.tick();

@@ -1,0 +1,16 @@
+{
+  "regions": [
+    {"id":"bay","outline":[[-160,-64],[128,-64],[128,128],[-160,128]],"unlock":{"type":"always"}},
+    {"id":"archive","parent":"bay","outline":[[8,8],[32,8],[32,48],[8,48]]}
+  ],
+  "playerVisible":["bay"],
+  "landmark":{"id":"arch","area":"bay","anchor":[-18,76,12],"entrance":[-20,64,14]},
+  "floor":"surface",
+  "presentation":"base",
+  "knownBlock":[-4,0],
+  "missingBlock":[128,0],
+  "publish":[
+    {"operationId":"edit-a","areaId":"bay","baseRevision":"7","outcome":"PUBLISHED","currentRevision":"8","reason":""},
+    {"operationId":"edit-b","areaId":"bay","baseRevision":"7","outcome":"CONFLICT","currentRevision":"8","reason":"stale base revision"}
+  ]
+}

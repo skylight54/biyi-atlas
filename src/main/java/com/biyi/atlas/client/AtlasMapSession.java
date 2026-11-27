@@ -12,15 +12,23 @@ public final class AtlasMapSession {
     private static int timer;
     private static String status="未选择地图范围";
     private static long lastRequest;
-    private static boolean complete;
+    private static AreaMapStatus.State state = AreaMapStatus.State.NO_AREA;
     private static String preparation="尚未启动区域加载";
     public static String preparation(){return preparation;}
-    public static boolean complete(){return complete;}
+    public static boolean complete(){return state == AreaMapStatus.State.COMPLETE;}
+    public static AreaMapStatus baseMapStatus() {
+        return new AreaMapStatus(active == null ? "" : active.id(), state, terrain.size(), status);
+    }
     public static void preparation(String text){preparation=text;}
     public static String status(){return status;}
-    public static void unpublished(String id){if(active!=null&&active.id().equals(id))status="区域底图尚未发布（当前仅本地预览）";}
+    public static void unpublished(String id){
+        if(active!=null&&active.id().equals(id)) {
+            state = AreaMapStatus.State.UNPUBLISHED;
+            status="区域底图尚未发布（当前仅本地预览）";
+        }
+    }
     public static AtlasRegion active(){return active;}
-    public static void reset(){active=null;complete=false;preparation="尚未启动区域加载";AtlasPresentation.resetLibrary();terrain=new TerrainSurvey();renderKey="";timer=0;status="未选择地图范围";com.biyi.atlas.net.AreaTerrainMessage.clearClient();}
+    public static void reset(){active=null;state=AreaMapStatus.State.NO_AREA;preparation="尚未启动区域加载";AtlasPresentation.resetLibrary();terrain=new TerrainSurvey();renderKey="";timer=0;status="未选择地图范围";com.biyi.atlas.net.AreaTerrainMessage.clearClient();}
     public static void tick(){
         var c=Minecraft.getInstance();
         if(c.player==null||c.level==null||++timer%20!=0)return;
@@ -28,7 +36,7 @@ public final class AtlasMapSession {
         if(active!=null){
             var current=AtlasContent.get().regionById(active.id());
             if(current!=null&&current!=active)select(current);
-            if(status.startsWith("正在请求")&&System.currentTimeMillis()-lastRequest>5000){
+            if(state == AreaMapStatus.State.REQUESTING && System.currentTimeMillis()-lastRequest>5000){
                 lastRequest=System.currentTimeMillis();com.biyi.atlas.net.AreaTerrainMessage.request(active.id());
             }
         }
@@ -48,10 +56,10 @@ public final class AtlasMapSession {
         var c=Minecraft.getInstance();
         com.biyi.atlas.net.AreaTerrainMessage.clearClient();
         AtlasPresentation.clear();
-        active=area;complete=false;
+        active=area;state=AreaMapStatus.State.REQUESTING;
         status="正在请求区域底图…";
         lastRequest=System.currentTimeMillis();
-        terrain=AtlasAuthoring.allowed()?AtlasStorage.get(area.dimension()).terrain().filtered((x,z)->area.contains(x,z)):new TerrainSurvey();
+        terrain=AtlasAuthoring.confirmed()?AtlasStorage.get(area.dimension()).terrain().filtered((x,z)->area.contains(x,z)):new TerrainSurvey();
         AtlasTerrainTiles.reset();
         if(c.getConnection()!=null)com.biyi.atlas.net.AreaTerrainMessage.request(area.id());
     }
@@ -60,12 +68,12 @@ public final class AtlasMapSession {
         if(active==null||!active.id().equals(id))return;
         TerrainSurvey incoming=new TerrainSurvey();incoming.load(tag);
         terrain=incoming;AtlasTerrainTiles.reset();
-        complete=tag.getBoolean("complete");
+        state=tag.getBoolean("complete") ? AreaMapStatus.State.COMPLETE : AreaMapStatus.State.PARTIAL;
         if(AtlasAuthoring.allowed()){
             AtlasStorage.get(active.dimension()).terrain().mergeFrom(incoming);AtlasStorage.markDirty();
         }
         AtlasPresentation.receive(active,tag);
-        status=(complete?"区域底图已载入 · ":"正在生成底图 · ")+incoming.size()+" 个采样点";
+        status=(complete()?"区域底图已载入 · ":"正在生成底图 · ")+incoming.size()+" 个采样点";
     }
     public static void rendering(boolean author,AtlasRegion area){
         renderingAuthor=author;

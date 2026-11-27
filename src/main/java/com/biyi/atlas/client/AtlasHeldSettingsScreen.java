@@ -18,7 +18,7 @@ public final class AtlasHeldSettingsScreen extends Screen {
         addRenderableWidget(new LeatherControl(left+10,top+51,36,"−",b->zoom(-1)));
         addRenderableWidget(new LeatherControl(left+panelWidth-46,top+51,36,"+",b->zoom(1)));
         addRenderableWidget(new LeatherControl(left+10,top+80,panelWidth-20,"恢复默认缩放",b->{AtlasSettings.setHeldZoom(HeldMapView.DEFAULT);AtlasHeldRenderer.invalidate();}));
-        addRenderableWidget(new LeatherControl(left+10,top+106,panelWidth-20,"打开大地图 [M]",b->AtlasScreen.open()));
+        addRenderableWidget(new LeatherControl(left+10,top+106,panelWidth-20,"打开大地图 [M]",b->AtlasScreen.openForMapKey()));
         addRenderableWidget(new LeatherControl(left+10,top+132,panelWidth-20,"收起设置",b->onClose()));
     }
     private void zoom(double delta){AtlasSettings.setHeldZoom(HeldMapView.scroll(AtlasSettings.heldZoom(),delta));AtlasHeldRenderer.invalidate();}
@@ -37,7 +37,7 @@ public final class AtlasHeldSettingsScreen extends Screen {
         return super.mouseClicked(x,y,button);
     }
     @Override public boolean keyPressed(int key,int scan,int mods){
-        if(AtlasKeys.OPEN.matches(key,scan)){AtlasScreen.open();return true;}
+        if(AtlasKeys.OPEN.matches(key,scan)){AtlasScreen.openForMapKey();return true;}
         return super.keyPressed(key,scan,mods);
     }
     @Override public void removed(){AtlasSettings.save();}

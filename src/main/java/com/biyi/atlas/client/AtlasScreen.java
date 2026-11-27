@@ -11,6 +11,8 @@ import com.biyi.atlas.map.AtlasRegion;
 import com.biyi.atlas.map.AtlasRoad;
 import com.biyi.atlas.map.AtlasRoadNode;
 import com.biyi.atlas.map.AtlasWaypoint;
+import com.biyi.atlas.map.MapAudience;
+import com.biyi.atlas.map.MapViewport;
 import com.biyi.atlas.map.TerrainCategory;
 import com.biyi.atlas.map.WaypointType;
 import com.biyi.atlas.net.AtlasNetwork;
@@ -86,7 +88,7 @@ public class AtlasScreen extends Screen {
             new ResourceLocation(BiyiAtlas.MODID, "textures/atlas/fog.png");
 
     private final List<AtlasButton> buttons = new ArrayList<>();
-    private enum UiSection {WORKFLOW,TOOLS,REGIONS,WAYPOINT,INSPECTOR,VIEW,SETTINGS,AI,CHROME}
+    private enum UiSection {WORKFLOW,TOOLS,REGIONS,WAYPOINT,INSPECTOR,VIEW,PERSONAL,SETTINGS,AI,CHROME}
     private UiSection buildingSection=UiSection.TOOLS,drawerSection=UiSection.TOOLS;
     private boolean drawerOpen;
     private boolean mapDragAllowed;
@@ -105,7 +107,16 @@ public class AtlasScreen extends Screen {
     private void openDrawer(UiSection section){
         drawerOpen=section!=drawerSection||!drawerOpen;drawerSection=section;drawerScroll=0;rebuildButtons();
     }
-    private AtlasUiLayout.Frame uiFrame(){return AtlasUiLayout.frame(this.width,this.height,authorMode);}
+    private AtlasUiLayout.Frame layoutFrame;
+    private int layoutWidth, layoutHeight;
+    private AtlasUiLayout.Frame uiFrame() {
+        if (layoutFrame == null || layoutWidth != width || layoutHeight != height) {
+            layoutFrame = AtlasUiLayout.frame(width, height, authorMode);
+            layoutWidth = width;
+            layoutHeight = height;
+        }
+        return layoutFrame;
+    }
     private boolean inDrawer(double x,double y){return drawerOpen&&uiFrame().drawer().contains(x,y);}
     private void arrangeUi(){
         buttons.removeIf(b->b.section==UiSection.CHROME);
@@ -147,15 +158,15 @@ public class AtlasScreen extends Screen {
         }
         buildingSection=UiSection.CHROME;
         var nav=new ArrayList<UiSection>();
+        nav.add(UiSection.PERSONAL);
         if(authorMode)nav.add(UiSection.TOOLS);
         nav.add(UiSection.REGIONS);nav.add(UiSection.WAYPOINT);nav.add(UiSection.INSPECTOR);nav.add(UiSection.VIEW);
         if(authorMode){nav.add(UiSection.SETTINGS);nav.add(UiSection.AI);}
-        java.util.List<AtlasUiLayout.Size> navSizes=new ArrayList<>();
-        for(int i=0;i<nav.size()+2;i++)navSizes.add(new AtlasUiLayout.Size(42,18));
-        var navRects=AtlasUiLayout.flow(this.width-32,navSizes);
+        var navRects = AtlasUiLayout.navigation(width, authorMode);
         for(int i=0;i<nav.size();i++){
             var section=nav.get(i);var r=navRects.get(i);
-            var button=new AtlasButton(16+r.x(),34+r.y(),r.width(),r.height(),sectionName(section),null,()->openDrawer(section));
+            Runnable action = section == UiSection.PERSONAL ? this::openDisplaySettings : () -> openDrawer(section);
+            var button=new AtlasButton(16+r.x(),34+r.y(),r.width(),r.height(),sectionName(section),null,action);
             button.selected=drawerOpen&&drawerSection==section;buttons.add(button);
         }
         var locate=navRects.get(nav.size());
@@ -166,10 +177,11 @@ public class AtlasScreen extends Screen {
     }
     private String sectionName(UiSection section){return switch(section){
         case TOOLS->"工具";case REGIONS->"区域";case WAYPOINT->"路标";
-        case INSPECTOR->authorMode?"属性":"详情";case VIEW->"视图";case SETTINGS->"设置";case AI->"MCP";default->"操作";
+        case INSPECTOR->authorMode?"属性":"详情";case VIEW->"视图";case PERSONAL->"设置";case SETTINGS->"工程";case AI->"MCP";default->"操作";
     };}
     public static void showForAi(boolean author,String panel){
-        var screen=new AtlasScreen(author);
+        if (author && !AtlasAuthoring.confirmed()) return;
+        var screen=createScreen(author);
         Minecraft.getInstance().setScreen(screen);
         screen.drawerSection=switch(panel){case "details"->UiSection.INSPECTOR;case "mcp"->UiSection.AI;case "regions"->UiSection.REGIONS;default->UiSection.VIEW;};
         if(screen.drawerSection==UiSection.INSPECTOR){screen.selectedRegion=AtlasMapSession.active();screen.lastUiSelection=screen.selectionKey();}
@@ -210,7 +222,7 @@ public class AtlasScreen extends Screen {
     public boolean revealing(){return revealRegion!=null;}
     public String revealStatus(){return revealRegion==null?"无演出":revealRegion.id()+" · "+(revealDissolve<0?"聚焦/等待底图":String.format("散雾 %.0f%%",revealProgress()*100));}
     public static void openReveal(AtlasRegion region){
-        var mc=Minecraft.getInstance();var screen=new AtlasScreen(false);mc.setScreen(screen);
+        var mc=Minecraft.getInstance();var screen=createScreen(false);mc.setScreen(screen);
         screen.dimension=region.dimension();screen.viewLayer=region.layer();screen.drawerOpen=false;
         AtlasRegion area=screen.outermostMapArea(region);
         if(area!=null&&area.mapArea())AtlasMapSession.select(area);
@@ -315,6 +327,21 @@ public class AtlasScreen extends Screen {
         openScreen(false);
     }
 
+    public static void openForMapKey() {
+        var player = Minecraft.getInstance().player;
+        if (player == null) return;
+        var audience = MapAudience.forMapKey(player.isCreative(), AtlasAuthoring.known(), AtlasAuthoring.allowed());
+        openScreen(audience == MapAudience.EDITOR);
+    }
+
+    private static AtlasScreen createScreen(boolean author) {
+        return author ? new EditorAtlasScreen() : new PlayerAtlasScreen();
+    }
+
+    public final void openDisplaySettings() {
+        Minecraft.getInstance().setScreen(new AtlasDisplaySettingsScreen(this));
+    }
+
     public static void openAuthor() {
         openScreen(true);
     }
@@ -324,15 +351,15 @@ public class AtlasScreen extends Screen {
         if (minecraft.level == null || minecraft.player == null) {
             return;
         }
-        if (author && !minecraft.player.isCreative() && !minecraft.player.hasPermissions(2)) {
+        if (author && (!AtlasAuthoring.confirmed() || (!minecraft.player.isCreative() && !minecraft.player.hasPermissions(2)))) {
             minecraft.player.displayClientMessage(
-                    Component.literal("[避役图志] 地图魔杖只有创造模式或管理员可以使用"), false);
+                    Component.literal("[避役图志] 作者地图需要服务端确认编辑权限"), false);
             return;
         }
-        minecraft.setScreen(new AtlasScreen(author));
+        minecraft.setScreen(createScreen(author));
     }
 
-    private void centerOnPlayer() {
+    protected final void centerOnPlayer() {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
             refreshViewArea();
@@ -407,7 +434,12 @@ public class AtlasScreen extends Screen {
     }
 
     /** 无界面装饰的共用内容层；手持与全屏执行相同可见性和导航规则。 */
-    private void renderMapContent(GuiGraphics graphics) {
+    protected final void renderMapContent(GuiGraphics graphics) {
+        if (!AtlasAuthoring.known() || (authorMode && !AtlasAuthoring.confirmed())) {
+            graphics.fill(0, 0, width, height, 0xff263a3b);
+            graphics.drawCenteredString(font, "等待地图权限…", width / 2, height / 2, 0xffdedfd2);
+            return;
+        }
         mapLabels.clear();
         if(!authorMode)viewArea=AtlasMapSession.active();
         if(revealRegion!=null&&viewArea==null)viewArea=revealRegion;
@@ -485,14 +517,37 @@ public class AtlasScreen extends Screen {
             double[] b=area.bounds();centerX=(b[0]+b[2])/2;centerZ=(b[1]+b[3])/2;
             pixelsPerBlock=Math.max(.01,Math.min(2,fitZoom(area)*AtlasSettings.heldZoom()/com.biyi.atlas.map.HeldMapView.DEFAULT));
         }
-        blitBudget = BLIT_BUDGET_PER_FRAME;
         graphics.fill(12,12,244,244,0xFFB6995C);
-        renderMapContent(graphics);
+        drawPlayerCanvas(graphics, dimension, 0, viewport());
         graphics.flush();AtlasFogShader.configureBlend();
         graphics.blit(new ResourceLocation(BiyiAtlas.MODID,"textures/atlas/held_leather_frame.png"),0,0,256,256,0,0,1024,1024,1024,1024);
         graphics.drawCenteredString(font, Component.translatable("key.biyi_atlas.open")
                 .append(" [").append(AtlasKeys.OPEN.getTranslatedKeyMessage()).append("]"),
                 128, 242, 0xFF392A16);
+    }
+
+    /** Snapshot after the screen has received its GUI dimensions. */
+    public final MapViewport viewport() {
+        return new MapViewport(width, height, centerX, centerZ, pixelsPerBlock);
+    }
+
+    /** Use a dedicated player screen instance for an offscreen target, already bound by the caller. */
+    public final void drawPlayerCanvas(GuiGraphics graphics, ResourceLocation targetDimension, int layer,
+                                       MapViewport camera) {
+        if (authorMode) throw new IllegalStateException("Player canvas requires a player view");
+        var client = Minecraft.getInstance();
+        if (client.player == null || client.level == null) return;
+        minecraft = client;
+        font = client.font;
+        width = camera.width();
+        height = camera.height();
+        dimension = targetDimension;
+        viewLayer = layer;
+        centerX = camera.centerX();
+        centerZ = camera.centerZ();
+        pixelsPerBlock = camera.pixelsPerBlock();
+        blitBudget = BLIT_BUDGET_PER_FRAME;
+        renderMapContent(graphics);
     }
 
     private void renderPaper(GuiGraphics graphics) {
@@ -706,8 +761,8 @@ public class AtlasScreen extends Screen {
 
     /** 元素级可见性（区域级 + 该类型的封锁设置 + 作者旁路）：所有渲染与命中都必须走它。 */
     private boolean elementVisible(AtlasVisibility.Kind kind, String regionId, double worldX, double worldZ) {
-        if(!authorMode&&!AtlasMapSession.inside(worldX,worldZ))return false;
-        return AtlasVisibility.visible(kind, regionId, worldX, worldZ, authorMode, dimension, viewLayer);
+        return AtlasReadView.elementVisible(authorMode ? MapAudience.EDITOR : MapAudience.PLAYER,
+                kind, regionId, dimension, viewLayer, worldX, worldZ);
     }
 
     /** 某一段折线是否可见：按**该段中点**的区域归属判定（逐段口径，取代"整条按首点"）。 */
@@ -1208,12 +1263,12 @@ public class AtlasScreen extends Screen {
 
     /** 屏幕 x → 世界 x（像素中心）。 */
     private double worldXOf(double screenX) {
-        return centerX + (screenX + 0.5D - this.width / 2.0D) / pixelsPerBlock;
+        return MapViewport.unproject(screenX + 0.5D, centerX, width, pixelsPerBlock);
     }
 
     /** 屏幕 y → 世界 z（像素中心）。 */
     private double worldZOf(double screenY) {
-        return centerZ + (screenY + 0.5D - this.height / 2.0D) / pixelsPerBlock;
+        return MapViewport.unproject(screenY + 0.5D, centerZ, height, pixelsPerBlock);
     }
 
     private int textureWidth(ResourceLocation texture) {
@@ -1861,11 +1916,11 @@ public class AtlasScreen extends Screen {
     }
 
     private double screenX(double worldX) {
-        return this.width / 2.0D + (worldX - centerX) * pixelsPerBlock;
+        return MapViewport.project(worldX, centerX, width, pixelsPerBlock);
     }
 
     private double screenY(double worldZ) {
-        return this.height / 2.0D + (worldZ - centerZ) * pixelsPerBlock;
+        return MapViewport.project(worldZ, centerZ, height, pixelsPerBlock);
     }
 
     private void setZoom(double value) {
@@ -1876,8 +1931,8 @@ public class AtlasScreen extends Screen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if(!mapDragAllowed)return true;
-        double dragWorldX = centerX + (mouseX - this.width / 2.0D) / pixelsPerBlock;
-        double dragWorldZ = centerZ + (mouseY - this.height / 2.0D) / pixelsPerBlock;
+        double dragWorldX = MapViewport.unproject(mouseX, centerX, width, pixelsPerBlock);
+        double dragWorldZ = MapViewport.unproject(mouseY, centerZ, height, pixelsPerBlock);
         if (button == 0 && vertexDragIndex >= 0) {
             updateVertexDrag(dragWorldX, dragWorldZ);   // 拖顶点：不移动地图
             return true;
@@ -1898,8 +1953,8 @@ public class AtlasScreen extends Screen {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         mapDragAllowed=false;
-        double releaseWorldX = centerX + (mouseX - this.width / 2.0D) / pixelsPerBlock;
-        double releaseWorldZ = centerZ + (mouseY - this.height / 2.0D) / pixelsPerBlock;
+        double releaseWorldX = MapViewport.unproject(mouseX, centerX, width, pixelsPerBlock);
+        double releaseWorldZ = MapViewport.unproject(mouseY, centerZ, height, pixelsPerBlock);
         if (button == 0 && vertexDragIndex >= 0) {
             commitVertexDrag();
             rebuildButtons();
@@ -1926,8 +1981,8 @@ public class AtlasScreen extends Screen {
             return true;
         }
         // 朝光标缩放：光标下的世界坐标保持不动
-        double worldX = centerX + (mouseX - this.width / 2.0D) / previous;
-        double worldZ = centerZ + (mouseY - this.height / 2.0D) / previous;
+        double worldX = MapViewport.unproject(mouseX, centerX, width, previous);
+        double worldZ = MapViewport.unproject(mouseY, centerZ, height, previous);
         pixelsPerBlock = next;
         clampZoom();   // 玩家侧：缩不出去，至少能看到当前大区域完整边界
         setCenter(worldX - (mouseX - this.width / 2.0D) / pixelsPerBlock,
@@ -1949,8 +2004,8 @@ public class AtlasScreen extends Screen {
             return true;
         }
         mapDragAllowed=true;
-        double hoverWorldX = centerX + (mouseX - this.width / 2.0D) / pixelsPerBlock;
-        double hoverWorldZ = centerZ + (mouseY - this.height / 2.0D) / pixelsPerBlock;
+        double hoverWorldX = MapViewport.unproject(mouseX, centerX, width, pixelsPerBlock);
+        double hoverWorldZ = MapViewport.unproject(mouseY, centerZ, height, pixelsPerBlock);
         // 顶点编辑：拖顶点 / 点边中点插入 / Shift+点顶点删除
         if (authorMode && button == 0 && vertexEditRegion != null) {
             int[] hit = vertexHit(vertexEditRegion, mouseX, mouseY);
@@ -2000,8 +2055,8 @@ public class AtlasScreen extends Screen {
             return true;
         }
         if (button == 1) {
-            double worldX = centerX + (mouseX - this.width / 2.0D) / pixelsPerBlock;
-            double worldZ = centerZ + (mouseY - this.height / 2.0D) / pixelsPerBlock;
+            double worldX = MapViewport.unproject(mouseX, centerX, width, pixelsPerBlock);
+            double worldZ = MapViewport.unproject(mouseY, centerZ, height, pixelsPerBlock);
             if (authorMode && hasShiftDown() && hasSelection()) {
                 deleteSelection();
                 return true;
@@ -2142,8 +2197,8 @@ public class AtlasScreen extends Screen {
                     }
                 }
             }
-            double worldX = centerX + (mouseX - this.width / 2.0D) / pixelsPerBlock;
-            double worldZ = centerZ + (mouseY - this.height / 2.0D) / pixelsPerBlock;
+            double worldX = MapViewport.unproject(mouseX, centerX, width, pixelsPerBlock);
+            double worldZ = MapViewport.unproject(mouseY, centerZ, height, pixelsPerBlock);
             AtlasRegion region = AtlasContent.get().regionAt(dimension, viewLayer, worldX, worldZ);
             if (region != null) {
                 selectedRegion = region;
@@ -2403,7 +2458,7 @@ public class AtlasScreen extends Screen {
     private List<AtlasRegion> treeRoots() {
         if (authorMode) {
             List<AtlasRegion> result = new ArrayList<>();
-            for (AtlasRegion region : AtlasContent.get().regionsAt(dimension, viewLayer)) {
+            for (AtlasRegion region : AtlasReadView.regions(MapAudience.EDITOR, dimension, viewLayer)) {
                 if (!region.isChild()) {
                     result.add(region);
                 }
@@ -2555,7 +2610,8 @@ public class AtlasScreen extends Screen {
     }
 
     /** 切换当前大区域：居中 + 层级跟随。 */
-    private void switchViewArea(AtlasRegion area) {
+    protected final void switchViewArea(AtlasRegion area) {
+        if (!authorMode && !AtlasVisibility.regionVisible(area.id())) return;
         if(!authorMode)AtlasMapSession.select(area);
         viewArea = area;
         viewLayer = area.layer();
@@ -2673,7 +2729,7 @@ public class AtlasScreen extends Screen {
             buttons.add(new AtlasButton(MARGIN+108,barY+20,64,16,"取消准备",null,()->com.biyi.atlas.net.AreaTerrainMessage.cancelPrepare()));
             buttons.add(new AtlasButton(MARGIN+212,barY,64,16,"玩家预览",null,()->{
                 if(selectedRegion!=null&&selectedRegion.mapArea()&&AtlasUnlocks.isVisible(selectedRegion.id()))AtlasMapSession.select(selectedRegion);
-                Minecraft.getInstance().setScreen(new AtlasScreen(false));
+                open();
             }));
         }
         if(authorMode){
@@ -3145,8 +3201,8 @@ public class AtlasScreen extends Screen {
         arrangeUi();
     }
 
-    private void moveEditHistory(boolean redo){
-        if(!authorMode||!AtlasAuthoring.allowed())return;
+    protected final void moveEditHistory(boolean redo){
+        if(!authorMode||!AtlasAuthoring.confirmed())return;
         if(!pendingRoad.isEmpty()||!pendingRegion.isEmpty()){
             message("请先完成或取消正在绘制的线条/区域，再撤销编辑");return;
         }
@@ -3403,7 +3459,7 @@ public class AtlasScreen extends Screen {
         rebuildButtons();
     }
 
-    private void updateWaypoint(AtlasWaypoint oldWaypoint, String name, String description) {
+    protected final void updateWaypoint(AtlasWaypoint oldWaypoint, String name, String description) {
         AtlasWaypoint updated = new AtlasWaypoint(name, oldWaypoint.type(), oldWaypoint.layer(),
                 oldWaypoint.x(), oldWaypoint.z(), oldWaypoint.icon(), description);
         AtlasStorage.get(dimension).replaceWaypoint(oldWaypoint, updated);

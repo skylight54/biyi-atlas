@@ -29,7 +29,7 @@ public final class AtlasAiBridge {
         var mc=Minecraft.getInstance();
         boolean map=mc.screen instanceof AtlasScreen;
         boolean held=mc.player!=null&&AtlasHeldRenderer.holdingMap(mc.player)&&(mc.screen==null||mc.screen instanceof AtlasHeldSettingsScreen);
-        if(working||!AtlasAuthoring.allowed()||!(map||held)||mc.level==null)return;
+        if(working||!AtlasAuthoring.confirmed()||!(map||held)||mc.level==null)return;
         Path request=dir.resolve("request.json");if(!Files.isRegularFile(request))return;
         JsonObject result=new JsonObject();
         try{

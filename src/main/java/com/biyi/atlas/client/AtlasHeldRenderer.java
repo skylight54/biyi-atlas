@@ -41,7 +41,7 @@ public final class AtlasHeldRenderer {
         if(c.player==null||c.level==null||(c.screen!=null&&!(c.screen instanceof AtlasHeldSettingsScreen))||!c.options.getCameraType().isFirstPerson())return;
         if(!c.player.getMainHandItem().is(ModItems.ATLAS.get())&&!c.player.getOffhandItem().is(ModItems.ATLAS.get()))return;
         if(ready&&++age<5)return;age=0;
-        if(view==null)view=new AtlasScreen(false);
+        if(view==null)view=new PlayerAtlasScreen();
         int draw=GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
         int read=GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
         int[] viewport=new int[4];GL11.glGetIntegerv(GL11.GL_VIEWPORT,viewport);

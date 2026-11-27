@@ -18,6 +18,7 @@ public final class AtlasAuthoring {
     private static volatile boolean allowed = true;
     private static boolean known;
     public static boolean known(){return known;}
+    public static boolean confirmed(){return known && allowed;}
 
     private AtlasAuthoring() {
     }
@@ -36,7 +37,7 @@ public final class AtlasAuthoring {
         if (!canAuthor) {
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft != null && minecraft.screen instanceof AtlasScreen screen && screen.isAuthorMode()) {
-                minecraft.setScreen(new AtlasScreen(false));   // 掉回玩家地图
+                AtlasScreen.open();
             }
         }
         if (changed) {

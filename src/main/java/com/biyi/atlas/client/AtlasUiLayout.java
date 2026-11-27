@@ -9,11 +9,14 @@ public final class AtlasUiLayout {
         public boolean contains(double px,double py){return px>=x&&py>=y&&px<x+width&&py<y+height;}
     }
     public record Frame(Rect header,Rect drawer,int contentTop,int contentBottom){}
+    public static List<Rect> navigation(int width, boolean author) {
+        return flow(Math.max(1, width - 32), Collections.nCopies(author ? 10 : 7, new Size(42, 18)));
+    }
     public static Frame frame(int width,int height){
         return frame(width,height,true);
     }
     public static Frame frame(int width,int height,boolean author){
-        int margin=8,headerHeight=author&&width<470?76:56;
+        int margin=8,headerHeight=38 + contentHeight(navigation(width, author));
         int dw=Math.min(320,Math.max(180,(int)(width*.42)));
         dw=Math.min(dw,Math.max(100,width-24));
         if(!author)dw=Math.min(220,Math.max(130,(int)(width*.28)));

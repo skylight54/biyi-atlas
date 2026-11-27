@@ -9,6 +9,7 @@ public final class TerrainChecks {
     }
 
     public static void main(String[] args) {
+        FoundationChecks.run();
         checkUiLayout();
         checkProjectBundle();
         check(HeldMapView.clamp(Double.NaN)==HeldMapView.DEFAULT,"异常缩放回到默认");

@@ -4,6 +4,7 @@ import com.biyi.atlas.BiyiAtlas;
 import com.biyi.atlas.map.AtlasMapData;
 import com.biyi.atlas.map.TerrainSurvey;
 import com.biyi.atlas.map.TerrainRaster;
+import com.biyi.atlas.map.TerrainTilePos;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -79,10 +80,10 @@ public final class AtlasTerrainTiles {
         if(current!=maskRevision){MASKS.clear();maskRevision=current;}
         long now=Minecraft.getInstance().level.getGameTime();
         if(now!=tick){tick=now;uploads=0;}
-        int left=(int)Math.floor((cx-width/(2*scale))/128),right=(int)Math.floor((cx+width/(2*scale))/128);
-        int top=(int)Math.floor((cz-height/(2*scale))/128),bottom=(int)Math.floor((cz+height/(2*scale))/128);
+        var first = TerrainTilePos.atBlock((int)Math.floor(cx-width/(2*scale)), (int)Math.floor(cz-height/(2*scale)));
+        var last = TerrainTilePos.atBlock((int)Math.floor(cx+width/(2*scale)), (int)Math.floor(cz+height/(2*scale)));
         try{
-            for(int tz=top;tz<=bottom;tz++)for(int tx=left;tx<=right;tx++){
+            for(int tz=first.z();tz<=last.z();tz++)for(int tx=first.x();tx<=last.x();tx++){
                 if(!data.hasTile(tx,tz))continue;
                 if(!AtlasMapSession.tileInScope(tx,tz))continue;
                 Tile t=tile(data,tx,tz);if(t==null)continue;
