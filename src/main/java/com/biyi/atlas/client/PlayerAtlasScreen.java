@@ -32,7 +32,7 @@ public final class PlayerAtlasScreen extends AtlasScreen {
         dim = minecraft.level.dimension().location();
         if (camera == null) {
             camera = centered(.12);
-            try { pins = new PlayerPinStore(minecraft, dim); }
+            try { pins = PlayerPinStore.forSession(minecraft, dim); }
             catch (IOException ex) { notifyPlayer("私人路标读取失败：" + ex.getMessage()); }
         } else camera = resized(camera);
         pressed = false;
@@ -123,13 +123,13 @@ public final class PlayerAtlasScreen extends AtlasScreen {
         }
         g.fill(0,0,width,22,0xff504d40);
         int w=width/5;
-        button(g,0,0,w,area==null?"返回区域":"世界总览",()->{
+        button(g,0,0,w,"设置",this::openDisplaySettings);
+        button(g,w,0,w,area==null?"返回区域":"世界总览",()->{
             if(area!=null) enter(null);
             else if(lastArea!=null && areas().contains(lastArea)) enter(lastArea);
             else {var r=containing(minecraft.player.getX(),minecraft.player.getZ()); if(r!=null)enter(r);else notifyPlayer("点击总览上的区域进入");}
         });
-        button(g,w,0,w,"定位",()->camera=centered(camera.pixelsPerBlock()));
-        button(g,w*2,0,w,"设置",this::openDisplaySettings);
+        button(g,w*2,0,w,"定位",()->camera=centered(camera.pixelsPerBlock()));
         button(g,w*3,0,w,"恢复路标",()->{
             try{if(pins!=null && pins.data.restoreDeletedWaypoint())savePins();else notifyPlayer("没有可恢复的私人路标");}
             catch(IllegalStateException ex){notifyPlayer(ex.getMessage());}

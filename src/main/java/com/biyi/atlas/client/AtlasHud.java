@@ -54,6 +54,15 @@ public final class AtlasHud {
                     for (var marker : AtlasStyle.INSTANCE.markers()) {
                         if (dimension.equals(marker.dimension())) dot(g, camera, dimension, marker.x(), marker.z());
                     }
+                    if (privatePinLevel != mc.level) {
+                        privatePinLevel = mc.level;
+                        privatePins = null;
+                        try { privatePins = PlayerPinStore.forSession(mc, dimension); }
+                        catch (java.io.IOException error) { com.mojang.logging.LogUtils.getLogger().warn("HUD private pins unavailable", error); }
+                    }
+                    if (privatePins != null) for (var point : privatePins.data.waypoints()) {
+                        if (point.layer() == 0) dot(g, camera, dimension, point.x(), point.z());
+                    }
                     for (var point : AtlasStorage.get(dimension).waypoints()) {
                         if (point.layer() == 0) dot(g, camera, dimension, point.x(), point.z());
                     }
@@ -81,6 +90,10 @@ public final class AtlasHud {
         g.fill(i-2, j-2, i+3, j+3, 0xff293d3e);
         g.fill(i-1, j-1, i+2, j+2, 0xffe8cd87);
     }
+
+    private static Object privatePinLevel;
+    private static PlayerPinStore privatePins;
+    static void clearSession() { privatePinLevel = null; privatePins = null; }
 
     private AtlasHud() {
     }

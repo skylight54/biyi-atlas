@@ -28,8 +28,9 @@ public final class AtlasAiBridge {
         try{heartbeat=Files.getLastModifiedTime(dir.resolve("heartbeat.json")).toMillis();}catch(Exception ignored){}
         var mc=Minecraft.getInstance();
         boolean map=mc.screen instanceof AtlasScreen;
-        boolean held=mc.player!=null&&AtlasHeldRenderer.holdingMap(mc.player)&&(mc.screen==null||mc.screen instanceof AtlasHeldSettingsScreen);
-        if(working||!AtlasAuthoring.confirmed()||!(map||held)||mc.level==null)return;
+        boolean preview = mc.screen instanceof EditorPreviewScreen;
+        boolean hud = mc.screen == null && mc.player != null && AtlasSettings.enabled();
+        if(working || !AtlasAuthoring.confirmed() || !(map || preview || hud) || mc.level == null)return;
         Path request=dir.resolve("request.json");if(!Files.isRegularFile(request))return;
         JsonObject result=new JsonObject();
         try{
@@ -95,8 +96,8 @@ public final class AtlasAiBridge {
             Files.copy(merged,dir.resolve("map.json"),StandardCopyOption.REPLACE_EXISTING);
             result.addProperty("revision",digest(content.exportAuthoredBytes()));
             result.addProperty("capturedAt",System.currentTimeMillis());
-            result.addProperty("screen",map?"atlas":mc.screen instanceof AtlasHeldSettingsScreen?"held_settings":"held");
-            result.addProperty("heldZoom",AtlasSettings.heldZoom());
+            result.addProperty("screen",map?"atlas":preview?"player_preview":"hud");
+            result.addProperty("hudZoom",AtlasSettings.zoom());
             if(mc.player!=null)result.addProperty("pitch",mc.player.getXRot());
             result.addProperty("terrainStatus",AtlasMapSession.status());
             result.addProperty("activeArea",AtlasMapSession.active()==null?"":AtlasMapSession.active().id());

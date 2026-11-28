@@ -49,7 +49,9 @@ public final class AtlasMapSession {
                     Math.hypot((b[0]+b[2])/2-c.player.getX(),(b[1]+b[3])/2-c.player.getZ());
             if(score<best){candidate=area;best=score;}
         }
-        if(active==null){if(candidate!=null)select(candidate);}
+        if (c.screen == null && candidate != null && best < 0 && active != candidate) {
+            select(candidate);
+        } else if(active==null){if(candidate!=null)select(candidate);}
         else if(!AtlasUnlocks.isVisible(active.id())||AtlasContent.get().regionById(active.id())==null){reset();AtlasTerrainTiles.reset();}
     }
     public static void select(AtlasRegion area){

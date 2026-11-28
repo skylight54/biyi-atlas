@@ -4,7 +4,6 @@ import com.biyi.atlas.BiyiAtlas;
 import com.biyi.atlas.map.AtlasContent;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -30,31 +29,11 @@ public final class ClientEvents {
         AtlasMapSession.tick();
         AtlasUnlockReveal.tick();
         AtlasAiBridge.tick();
-        AtlasHeldRenderer.tick();
         if (client.getConnection()!=null && AtlasAuthoring.allowed()&&contentSync.poll(System.currentTimeMillis())) {
             uploadContent();
         }
         AtlasStorage.tickAutosave();
         AtlasRoadRecorder.tick();
-    }
-
-    /** Intercept use before block/item interactions, including a map held in the offhand. */
-    @SubscribeEvent
-    public static void onUseMapSettings(InputEvent.InteractionKeyMappingTriggered event) {
-        if (!event.isUseItem()) return;
-        var client = net.minecraft.client.Minecraft.getInstance();
-        // Forge sends a use event for each hand; consume the second one after opening too.
-        if (client.screen instanceof AtlasHeldSettingsScreen) {
-            event.setCanceled(true);
-            event.setSwingHand(false);
-            return;
-        }
-        if (client.screen != null || client.player == null || client.level == null
-                || !client.options.getCameraType().isFirstPerson()
-                || !client.options.keyShift.isDown() || !AtlasHeldRenderer.holdingMap(client.player)) return;
-        event.setCanceled(true);
-        event.setSwingHand(false);
-        client.setScreen(new AtlasHeldSettingsScreen());
     }
 
     @SubscribeEvent
@@ -92,7 +71,8 @@ public final class ClientEvents {
         AtlasMapSession.reset();
         AtlasUnlockReveal.clear();
         AtlasFogRenderer.reset();
-        AtlasHeldRenderer.reset();
+        PlayerPinStore.clearSession();
+        AtlasHud.clearSession();
         AtlasTerrainTiles.reset();
         TerrainSurveyor.reset();
         AtlasContent.get().saveAuthored();

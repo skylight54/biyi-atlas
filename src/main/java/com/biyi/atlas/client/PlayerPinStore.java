@@ -12,7 +12,26 @@ final class PlayerPinStore {
     private final Path file;
     final AtlasMapData data;
 
-    PlayerPinStore(Minecraft client, ResourceLocation dimension) throws IOException {
+    private static PlayerPinStore session;
+    private static Object level;
+    private static ResourceLocation sessionDimension;
+
+    static PlayerPinStore forSession(Minecraft client, ResourceLocation dimension) throws IOException {
+        if (session == null || level != client.level || !dimension.equals(sessionDimension)) {
+            session = new PlayerPinStore(client, dimension);
+            level = client.level;
+            sessionDimension = dimension;
+        }
+        return session;
+    }
+
+    static void clearSession() {
+        session = null;
+        level = null;
+        sessionDimension = null;
+    }
+
+    private PlayerPinStore(Minecraft client, ResourceLocation dimension) throws IOException {
         this(client.gameDirectory.toPath().resolve("biyi_atlas/data"),AtlasStorage.currentWorldKey(),client.player.getUUID(),dimension);
     }
 
