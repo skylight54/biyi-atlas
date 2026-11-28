@@ -1,0 +1,9 @@
+allprojects {
+    afterEvaluate {
+        tasks.register("verifyPlayerPins", JavaExec) {
+            dependsOn testClasses
+            classpath = sourceSets.test.output + sourceSets.main.output + sourceSets.test.compileClasspath
+            mainClass = "com.biyi.atlas.client.PlayerPinChecks"
+        }
+    }
+}
