@@ -1308,8 +1308,15 @@ public class AtlasScreen extends Screen {
 
     /** 旅行地图底片：给作者画区域时当参考，不写入任何数据。 */
     private void renderJourneyUnderlay(GuiGraphics graphics) {
-        if (!journeyUnderlay) {
+        if (!authorMode || !AtlasAuthoring.confirmed() || !journeyUnderlay) {
             return;
+        }
+        if (minecraft.level == null || !dimension.equals(minecraft.level.dimension().location())) return;
+        if (JourneyMapImport.layer().equals("day")) {
+            if (surfaceReference == null) surfaceReference = new EditorSurfaceReference();
+            graphics.enableScissor(MARGIN,MARGIN,width-MARGIN,height-MARGIN);
+            try { surfaceReference.draw(graphics, viewport()); }
+            finally { graphics.disableScissor(); }
         }
         java.nio.file.Path dir = JourneyMapImport.currentLayerDir();
         if (dir == null) {
@@ -1364,6 +1371,7 @@ public class AtlasScreen extends Screen {
     }
 
     private static final Map<String, ResourceLocation> JM_TEXTURES = new HashMap<>();
+    private EditorSurfaceReference surfaceReference;
 
     /** 框选矩形（作者用来划定"生成俯视图/导入旅行地图"的范围）。 */
     private void renderPendingRect(GuiGraphics graphics) {
@@ -2988,10 +2996,12 @@ public class AtlasScreen extends Screen {
                     rebuildButtons();
                 }));
                 buttons.add(new AtlasButton(panelX + 130, contentY + 68, 202, 16,
-                        "旅行图底片：" + (journeyUnderlay ? "开" : "关") + "（" + JourneyMapImport.layer() + "）",
+                        "实景参考：" + (journeyUnderlay ? "开" : "关") + "（" + JourneyMapImport.layer() + "）",
                         null, () -> {
                     journeyUnderlay = !journeyUnderlay;
-                    if (journeyUnderlay && JourneyMapImport.currentLayerDir() == null) {
+                    if (journeyUnderlay && JourneyMapImport.layer().equals("day")) {
+                        message("地表参考已开：旅行图缺片处显示人物附近已加载的方块。");
+                    } else if (journeyUnderlay && JourneyMapImport.currentLayerDir() == null) {
                         message("找不到旅行地图数据：" + JourneyMapImport.diagnostic());
                     } else {
                         message("旅行图底片：" + (journeyUnderlay ? "开（画区域时可参考）" : "关"));
@@ -4423,6 +4433,7 @@ public class AtlasScreen extends Screen {
 
     @Override
     public void removed() {
+        if (surfaceReference != null) { surfaceReference.close(); surfaceReference = null; }
         if (this instanceof EditorAtlasScreen && (!pendingRoad.isEmpty() || !pendingRegion.isEmpty())) {
             suspended.save(minecraft.level, minecraft.getConnection(), new EditorDraft.Geometry(
                     dimension.toString(), editLayer, tool.name(), regionBrush.name(), roadBrush.name(),
